@@ -91,16 +91,42 @@ int main(int argc, char** argv)
       std::cout << "FATAL ERROR: Cannot initialize MPI!" << "\n";
       exit(EXIT_FAILURE);
     }
-    MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
+    if (request > provided) {
+      std::cout << "FATAL ERROR: Requested Thread level not provided" << "\n";
+      exit(EXIT_FAILURE);
+    }
   }
 
-  MPI_Barrier(MPI_COMM_WORLD);
-  const double time0 = MPI_Wtime(); 
+  MPI_Comm commGlobal = MPI_COMM_NULL;
 
-  MPI_Comm commGlobal;
-  MPI_Comm_dup(MPI_COMM_WORLD, &commGlobal);
+  #ifdef MPI_HONOR_APPNUM
+  {
+    int *appnumPtr = nullptr;
+    int flag = 0;
+    MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_APPNUM, &appnumPtr, &flag);
+    if (!flag || appnumPtr == nullptr) {
+      std::fprintf(stderr, "MPI_APPNUM not available\n");
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
 
-  MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+    int worldRank = -1;
+    MPI_Comm_rank(MPI_COMM_WORLD, &worldRank);
+    MPI_Comm_split(MPI_COMM_WORLD, *appnumPtr, worldRank, &commGlobal);
+
+    if (commGlobal == MPI_COMM_NULL) {
+      std::fprintf(stderr, "unexpected MPI_COMM_NULL\n");
+      MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+  }
+  #else
+    MPI_Comm_dup(MPI_COMM_WORLD, &commGlobal);
+  #endif
+
+  MPI_Comm_rank(commGlobal, &worldRank);
+  MPI_Comm_set_errhandler(commGlobal, MPI_ERRORS_RETURN);
+  MPI_Barrier(commGlobal);
+
+  const double time0 = MPI_Wtime();
 
   if(!getenv("NEKRS_HOME")) {
     std::cout << "FATAL ERROR: Cannot find env variable NEKRS_HOME!" << "\n";
@@ -368,6 +394,7 @@ int main(int argc, char** argv)
   const int exitValue = nekrs::finalize();
 
   MPI_Barrier(commGlobal);
+  MPI_Comm_free(&commGlobal);
   MPI_Finalize();
 
   if(exitValue)

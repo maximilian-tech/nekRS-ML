@@ -29,7 +29,7 @@ set(OGS_SOURCES
         src/core/ogs/QQt.cpp
         src/core/ogs/oogs.cpp)
 
-set(NRS_SRC 
+set(NRS_SRC
     src/lib/nekrs.cpp
     src/core/threadPool.cpp
     src/core/io/iofld.cpp
@@ -179,9 +179,9 @@ if (NEKRS_BUILD_FLOAT)
   endif()
 endif()
 
-target_include_directories(nekrs-lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${NRS_INCLUDE}) 
+target_include_directories(nekrs-lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${NRS_INCLUDE})
 if (NEKRS_BUILD_FLOAT)
-  target_include_directories(nekrs-lib-fp32 PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${NRS_INCLUDE}) 
+  target_include_directories(nekrs-lib-fp32 PUBLIC ${CMAKE_CURRENT_BINARY_DIR} ${NRS_INCLUDE})
 endif()
 
 if (NEKRS_BUILD_FLOAT)
@@ -189,13 +189,17 @@ if (NEKRS_BUILD_FLOAT)
 endif()
 
 add_executable(nekrs-bin src/bin/driver.cpp)
-if (NEKRS_BUILD_FLOAT)
-  add_executable(nekrs-bin-fp32 src/bin/driver.cpp)
-endif()
+target_compile_definitions(nekrs-bin PRIVATE
+  $<$<BOOL:${MPI_HONOR_APPNUM}>:MPI_HONOR_APPNUM=1>
+)
 
 target_include_directories(nekrs-bin PRIVATE src/lib src/utils)
 set_target_properties(nekrs-bin PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs)
 if (NEKRS_BUILD_FLOAT)
+  add_executable(nekrs-bin-fp32 src/bin/driver.cpp)
   target_include_directories(nekrs-bin-fp32 PRIVATE src/lib src/utils)
   set_target_properties(nekrs-bin-fp32 PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME nekrs-fp32)
+  target_compile_definitions(nekrs-bin-fp32 PRIVATE
+    $<$<BOOL:${MPI_HONOR_APPNUM}>:MPI_HONOR_APPNUM=1>
+  )
 endif()
