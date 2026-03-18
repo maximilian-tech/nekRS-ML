@@ -701,6 +701,11 @@ int finalize()
     hypreWrapper::finalize();
     hypreWrapperDevice::finalize();
     AMGXfinalize();
+
+    if (udf.finalize) {
+      udf.finalize();
+    }
+
     nek::finalize();
   }
 
