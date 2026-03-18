@@ -10,6 +10,11 @@
 #include "mesh.h"
 #include "pointInterpolation.hpp"
 
+#include "rdq/rdq.h"
+#include "rdq/log.h"
+#include "rdq/dlpack_iface.h"
+static rdq_ctx_t* ctx = NULL;
+
 static dfloat ReTau;
 static dfloat zLength;
 static dfloat xLength;
@@ -20,6 +25,8 @@ static int tAvgWriteInterval;
 static int NUMBER_ELEMENTS_X;
 static int NUMBER_ELEMENTS_Y;
 static int NUMBER_ELEMENTS_Z;
+
+static dlong npts_;
 
 static int Nfields = 11;
 static std::vector<dfloat> usrwrk;
@@ -85,7 +92,7 @@ void writeStatistics(nrs_t *nrs, dfloat time, int tstep, const std::string& fnam
     interpolator->setPoints(xp, yp, zp);
     interpolator->find(pointInterpolation_t::VerbosityLevel::Detailed);
 
-    if (platform->comm.mpiRank == 0) { 
+    if (platform->comm.mpiRank == 0) {
       std::ofstream f(fname, std::ios::app);
       f << R"(Points:0,Points:1,Points:2)"
         << R"(,AVVEL:0,AVVEL:1,AVVEL:2,AVPRE)"
@@ -103,10 +110,10 @@ void writeStatistics(nrs_t *nrs, dfloat time, int tstep, const std::string& fnam
 
   planarAvg(mesh, "xz", NUMBER_ELEMENTS_X, NUMBER_ELEMENTS_Y, NUMBER_ELEMENTS_Z, Nfields, nrs->fieldOffset, o_work);
 
-  interpolator->eval(Nfields, 
-                     nrs->fieldOffset, 
-                     o_work, 
-                     offset, 
+  interpolator->eval(Nfields,
+                     nrs->fieldOffset,
+                     o_work,
+                     offset,
                      o_fields1D);
 
   if (platform->comm.mpiRank == 0) {
@@ -266,7 +273,7 @@ void calcTauWall(nrs_t *nrs, double time, int tstep, occa::memory o_avg)
     mesh->o_D,
     o_avg,
     o_Sij);
-  
+
   oogs::startFinish(o_Sij,
     2 * nrs->NVfields,
     nrs->fieldOffset,
@@ -357,6 +364,18 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   platform->par->extract("casedata", "number_elements_y", NUMBER_ELEMENTS_Y);
   platform->par->extract("casedata", "number_elements_z", NUMBER_ELEMENTS_Z);
   platform->par->extract("casedata", "tAvgWriteInterval", tAvgWriteInterval);
+
+  const int nshards = 1;
+  int shard = 0;
+  int size;
+  MPI_Comm_size(comm, &size);
+  int owners[1] = {size}; // mpmd -- > size is the next appnum
+  RDQ_ASSERT(rdq_open(MPI_COMM_WORLD, nshards, owners, NULL,  &ctx) == RDQ_OK);
+  //rdq_log_set_level(ctx, RDQ_LOG_TRACE);
+  rdq_log_set_categories(ctx, RDQ_LOGC_ALL); // or a mask you want
+  rdq_log_shard_stats(ctx);
+  RDQ_ASSERT(rdq_register_producer(ctx, shard) == RDQ_OK);
+  std::cout << "HERER!!!!!" << std::endl;
 }
 
 void UDF_Setup()
@@ -402,17 +421,83 @@ void UDF_Setup()
 
   dlong npts = interpolator->numPoints();
   BdryToV.resize(npts);
-
+  npts_ = npts;
   o_Upart.resize(nrs->NVfields * npts);
   Upart.resize(nrs->NVfields * npts);
 
   o_BdryToV.copyTo(BdryToV, BdryToV.size());
 
   // Initialize SmartRedis client
+#ifdef SMARTREDIS
   client = new smartredis_client_t(nrs);
   client->init_check_run();
   client->init_wallModel_train(npts);
+#endif
 }
+//#################################################
+//#################################################
+//#################################################
+//#################################################
+//#################################################
+
+
+#if 1
+void put_wallModel_data(
+        std::vector<dfloat> wall_shear_stress, 
+        std::vector<dlong> BdryToV, 
+        std::vector<dfloat> Upart,
+        int tstep)
+{
+  int _num_inputs = 1, _num_outputs=1;
+  int _num_samples = npts_;
+  unsigned long int num_cols = _num_inputs+_num_outputs; // 1 + 1
+  //std::string key = "x." + std::to_string(_rank) + "." + std::to_string(tstep);
+  
+  std::vector<dfloat> train_data(_num_samples*num_cols); // _num_samples=npts
+  std::vector<dfloat> vel_data(_num_samples);
+  std::vector<dfloat> shear_data(_num_samples);
+
+  // Extract velocity at off-wall nodes (inputs) and shear at wall nodes (outputs)
+  dfloat avg_utau = 0.0;
+  dfloat avg_ut   = 0.0;
+  for (int n = 0; n < _num_samples; ++n) {
+    const int v = BdryToV[n];
+    vel_data[n] = Upart[0*_num_samples + n];
+    avg_ut += vel_data[n];
+    shear_data[n] = wall_shear_stress[v+0*nrs->fieldOffset];
+    avg_utau += shear_data[n];
+  }
+  int rank = -1;
+  MPI_Comm_rank(platform->comm.mpiComm, &rank);
+  if (rank == 0)
+    printf("\nTrain :: AVG -- UTAU UT :: %g %g \n",sqrt(abs(avg_utau/_num_samples)),avg_ut/_num_samples);
+
+  // Concatenate inputs and outputs
+  for (int i=0; i<_num_samples; i++) {
+    train_data[i*num_cols] = vel_data[i];
+    train_data[i*num_cols+1] = shear_data[i];
+  }
+  std::string key = "";
+  // _client->put_tensor(key, train_data.data(), {_num_samples,num_cols},
+  //                   SRTensorTypeDouble, SRMemLayoutContiguous);
+  int64_t shape[2] = {_num_samples, num_cols};
+  rdq_dl_desc_t d = {
+            .data = train_data.data(),
+            .nbytes = train_data.size() * sizeof(train_data[0]),
+            .ndim = 2,
+            .shape = shape,
+            .strides = NULL,
+            .device_type = kDLCPU,
+            .device_id = 0,
+            .dtype_code = kDLFloat,
+            .dtype_bits = 64,
+            .dtype_lanes = 1,
+            .byte_offset = 0
+        };
+  int target = 0;
+  RDQ_ASSERT(rdq_send_dl(ctx, target, &d) == RDQ_OK);
+}
+#endif
 
 void UDF_ExecuteStep(dfloat time, int tstep)
 {
@@ -421,16 +506,20 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   tavg::run(time);
 
   // Send training data for model every set number of steps
-  if (tstep%100==0 && tstep>0) {
+  if (tstep%1==0 && tstep>0) {
     auto o_avg = tavg::o_avg();
     calcTauWall(nrs, time, tstep, o_avg); //calculates shear stress in volume
     updateRecycledVelocity(nrs, o_avg, verbose); //interpolates velocity on off-wall nodes
     o_Upart.copyTo(Upart); //copy from occa mem to CPU mem
-
+#ifdef SMARTREDIS
     client->put_wallModel_data(usrwrk, BdryToV, Upart, tstep);
+#else
+    put_wallModel_data(usrwrk, BdryToV, Upart, tstep);
+#endif
     MPI_Barrier(platform->comm.mpiComm);
-
+#ifdef SMARTREDIS
     client->put_step_num(tstep);
+#endif
     if (platform->comm.mpiRank == 0)
       std::cout << "All ranks finished sending training data for step " << tstep << std::endl;
   }
@@ -438,11 +527,25 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   if (tstep > 1 && (tstep % tAvgWriteInterval)==0) {
      writeStatistics(nrs, time, tstep, "NekAvgData_1D.csv");
   }
-
-  // Every time step check if ML training says it is time to quit 
+  if (nrs->lastStep) {
+  int shard=0;
+  std::cout << "Begin unregister: Step " << tstep << std::endl;
+  RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);
+  std::cout << "End unregister: Step " << tstep << std::endl;
+  }
+  // Every time step check if ML training says it is time to quit
+#ifdef SMARTREDIS
   int exit_val = client->check_run();
   if (exit_val==0) {
     nekrs::setEndTime(-10.0);
     nekrs::forceLastStep();
   }
+#endif
+}
+
+void UDF_Finalize()
+{
+  
+    rdq_close(ctx);
+    std::cout << "finalize!!!!!" << std::endl;
 }
