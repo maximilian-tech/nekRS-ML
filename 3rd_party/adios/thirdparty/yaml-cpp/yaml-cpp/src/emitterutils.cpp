@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <cstdint>
 
 #include "emitterutils.h"
 #include "exp.h"
@@ -11,6 +12,7 @@
 #include "yaml-cpp/binary.h"  // IWYU pragma: keep
 #include "yaml-cpp/null.h"
 #include "yaml-cpp/ostream_wrapper.h"
+
 
 namespace YAML {
 namespace Utils {
