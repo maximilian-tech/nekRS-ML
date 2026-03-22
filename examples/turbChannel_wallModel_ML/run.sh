@@ -1,5 +1,5 @@
 #!/bin/env bash
-
+set -x
 set -euo pipefail
 
 . $HOME/spack/share/spack/setup-env.sh
