@@ -13,6 +13,7 @@
 #include "rdq/rdq.h"
 #include "rdq/log.h"
 #include "rdq/dlpack_iface.h"
+#include "rdq/feedback.h"
 static rdq_ctx_t* ctx = NULL;
 
 static dfloat ReTau;
@@ -45,6 +46,9 @@ static pointInterpolation_t *interpolator = nullptr;
 static int Nblock;
 
 smartredis_client_t* client = nullptr;
+
+static rdq_global_feedback_channel_t ch;
+static rdq_global_feedback_op_t op;
 
 #ifdef __okl__
 #include "ci.oudf"
@@ -364,18 +368,31 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   platform->par->extract("casedata", "number_elements_y", NUMBER_ELEMENTS_Y);
   platform->par->extract("casedata", "number_elements_z", NUMBER_ELEMENTS_Z);
   platform->par->extract("casedata", "tAvgWriteInterval", tAvgWriteInterval);
-
+#ifdef SMARTREDIS
+#else
   const int nshards = 1;
   int shard = 0;
   int size;
-  MPI_Comm_size(comm, &size);
-  int owners[1] = {size}; // mpmd -- > size is the next appnum
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+  int owners[1] = {size-1}; // mpmd -- > size is the next appnum
   RDQ_ASSERT(rdq_open(MPI_COMM_WORLD, nshards, owners, NULL,  &ctx) == RDQ_OK);
   //rdq_log_set_level(ctx, RDQ_LOG_TRACE);
   rdq_log_set_categories(ctx, RDQ_LOGC_ALL); // or a mask you want
   rdq_log_shard_stats(ctx);
   RDQ_ASSERT(rdq_register_producer(ctx, shard) == RDQ_OK);
   std::cout << "HERER!!!!!" << std::endl;
+  
+  MPI_Comm* intercomm = NULL;
+  int n_intercomm = 0;
+  std::cout << "HERER!!!!! " << n_intercomm << std::endl;
+  RDQ_Create_intercomm(comm, &intercomm, &n_intercomm);
+  std::cout << "HERER!!!!! num intercomm: " << n_intercomm << std::endl;
+  if(n_intercomm > 0)
+  {
+    rdq_global_feedback_channel_init(&ch, comm, intercomm[0], /*is sender*/ 0, 0);
+    rdq_global_feedback_op_init(&op);
+  }
+#endif  
 }
 
 void UDF_Setup()
@@ -441,7 +458,8 @@ void UDF_Setup()
 //#################################################
 
 
-#if 1
+#ifdef SMARTREDIS
+#else
 void put_wallModel_data(
         std::vector<dfloat> wall_shear_stress, 
         std::vector<dlong> BdryToV, 
@@ -451,6 +469,7 @@ void put_wallModel_data(
   int _num_inputs = 1, _num_outputs=1;
   int _num_samples = npts_;
   unsigned long int num_cols = _num_inputs+_num_outputs; // 1 + 1
+  
   //std::string key = "x." + std::to_string(_rank) + "." + std::to_string(tstep);
   
   std::vector<dfloat> train_data(_num_samples*num_cols); // _num_samples=npts
@@ -477,9 +496,7 @@ void put_wallModel_data(
     train_data[i*num_cols] = vel_data[i];
     train_data[i*num_cols+1] = shear_data[i];
   }
-  std::string key = "";
-  // _client->put_tensor(key, train_data.data(), {_num_samples,num_cols},
-  //                   SRTensorTypeDouble, SRMemLayoutContiguous);
+
   int64_t shape[2] = {_num_samples, num_cols};
   rdq_dl_desc_t d = {
             .data = train_data.data(),
@@ -498,6 +515,8 @@ void put_wallModel_data(
   RDQ_ASSERT(rdq_send_dl(ctx, target, &d) == RDQ_OK);
 }
 #endif
+
+static int recv_posted = 0;
 
 void UDF_ExecuteStep(dfloat time, int tstep)
 {
@@ -527,12 +546,8 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   if (tstep > 1 && (tstep % tAvgWriteInterval)==0) {
      writeStatistics(nrs, time, tstep, "NekAvgData_1D.csv");
   }
-  if (nrs->lastStep) {
-  int shard=0;
-  std::cout << "Begin unregister: Step " << tstep << std::endl;
-  RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);
-  std::cout << "End unregister: Step " << tstep << std::endl;
-  }
+
+  
   // Every time step check if ML training says it is time to quit
 #ifdef SMARTREDIS
   int exit_val = client->check_run();
@@ -540,12 +555,33 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     nekrs::setEndTime(-10.0);
     nekrs::forceLastStep();
   }
-#endif
+#else
+  std::cout << "Arrived here " << __LINE__ << std::endl;
+  int completed = 0;
+  RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
+
+  if (completed) {
+    if (op.header.command == 1) {
+        nekrs::setEndTime(-10.0);
+        nekrs::forceLastStep();
+    }
+
+    RDQ_ASSERT(RDQ_OK == rdq_global_feedback_op_reset(&op));
 }
 
+#endif
+}
+#ifdef SMARTREDIS
+#else
 void UDF_Finalize()
 {
-  
-    rdq_close(ctx);
-    std::cout << "finalize!!!!!" << std::endl;
+  int shard=0;
+  RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);  
+
+  rdq_global_feedback_channel_close(&ch, &op);
+  rdq_global_feedback_op_free(&op);
+    
+  rdq_close(ctx);
+  std::cout << "finalize!!!!!" << std::endl;
 }
+#endif

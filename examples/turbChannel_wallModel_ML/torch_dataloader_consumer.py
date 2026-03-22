@@ -84,7 +84,15 @@ def main():
 
     ctx = rdqpy.Context(comm, nshards=1, owners=owners)
     ctx.set_log(level=2, categories=0xFFFF, json=False, color=False)
+    intercomms, n_intercomm = rdqpy.create_intercomm(ml_comm)
+    assert len(intercomms) == n_intercomm
+    if n_intercomm != 1:
+        raise RuntimeError(f"Expected exactly one intercommunicator, got {n_intercomm}")
 
+    intercomm = intercomms[0]
+    print("here=")
+    ch = rdqpy.GlobalFeedbackChannel(ml_comm, intercomm, is_sender_group=True, root_rank=0)
+    print("here=")
     # Wrap DDQ as a streaming dataset
     dataset = DDQIterableDataset(ctx, shard=shard)
 
@@ -113,15 +121,15 @@ def main():
         print(f"[consumer rank {rank}] received tensor {count}: shape={tuple(batch.shape)}, dtype={batch.dtype}",flush=True)
         #t = None
         
-        print(f"{batch.shape=}",flush=True)
+        #print(f"{batch.shape=}",flush=True)
         features = batch[:, :ndIn]
-        print(f"{features.shape=}",flush=True)
+        #print(f"{features.shape=}",flush=True)
         target = batch[:, ndIn:]
-        print(f"{target.shape=}",flush=True)
+        #print(f"{target.shape=}",flush=True)
         
         optimizer.zero_grad()
         output = model.forward(features)
-        print(f"{output.shape=}",flush=True)
+        #print(f"{output.shape=}",flush=True)
         
         loss = loss_fn(output, target)
         loss.backward()
@@ -130,8 +138,25 @@ def main():
         print(f"{iteration=} {loss.item()=}")
 
         count += 1
+        
+        if loss.item() < 1e-4:
+            done = ch.send_progress(
+                {
+                    "seq": 1,
+                    "epoch": iteration,
+                    "command": 1,
+                    "payload_kind": 0,
+                    "source_rank": 0,
+                    "target_group": 7,
+                }
+            )
+            print("!!!!!!!!!! MESSAGE POSTED !!!!!!!!!!!!!!!")
+            if done:
+                print("!!!!!!!!!! MESSAGE RECIEVED !!!!!!!!!!!!!!!")
+
 
     print(f"[consumer rank {rank}] drained shard {shard}; total tensors: {count}")
+    ch.close()
     ml_comm.Free()
     ctx.close()
 
