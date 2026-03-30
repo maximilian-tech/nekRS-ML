@@ -1,0 +1,3 @@
+[submodule "3rd_party/remote-data-queue"]
+	path = 3rd_party/remote-data-queue
+	url = git@gitlab.hrz.tu-chemnitz.de:s0872522--tu-dresden.de/remote-data-queue.git
