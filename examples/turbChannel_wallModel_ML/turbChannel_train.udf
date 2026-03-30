@@ -470,8 +470,6 @@ void put_wallModel_data(
   int _num_samples = npts_;
   unsigned long int num_cols = _num_inputs+_num_outputs; // 1 + 1
   
-  //std::string key = "x." + std::to_string(_rank) + "." + std::to_string(tstep);
-  
   std::vector<dfloat> train_data(_num_samples*num_cols); // _num_samples=npts
   std::vector<dfloat> vel_data(_num_samples);
   std::vector<dfloat> shear_data(_num_samples);

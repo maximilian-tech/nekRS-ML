@@ -30,7 +30,7 @@ chk_case $TOTAL_RANKS
 # Generate the affinity scripts
 SAFF_FILE=affinity_nrs.sh
 TAFF_FILE=affinity_ml.sh
-if [ ${ZE_FLAT_DEVICE_HIERARCHY} == "COMPOSITE" ] || [[ -z "${ZE_FLAT_DEVICE_HIERARCHY}" ]]; then
+if [[ ${ZE_FLAT_DEVICE_HIERARCHY} == "COMPOSITE"  || -z "${ZE_FLAT_DEVICE_HIERARCHY}" ]]; then
   echo "#!/bin/bash" > $SAFF_FILE
   echo "num_gpus=\$1" >> $SAFF_FILE
   echo "shift" >> $SAFF_FILE
@@ -71,7 +71,7 @@ chmod u+x $SAFF_FILE $TAFF_FILE
 
 #--------------------------------------
 # Generate the workflow config script
-CFILE=ssim_config.yaml
+CFILE=ssim_config2.yaml
 echo "# Database config" > $CFILE
 echo "database:" >> $CFILE
 echo "    launch: True" >> $CFILE
@@ -177,7 +177,7 @@ echo "ssimDbNodes = ${DB_NODES}" >> $PFILE
 
 #--------------------------------------
 # Generate the run script
-RFILE=run.sh
+RFILE=run2.sh
 echo "#!/bin/bash" > $RFILE
 
 echo "export TZ='/usr/share/zoneinfo/US/Central'" >> $RFILE

@@ -218,7 +218,8 @@ def main(cfg: DictConfig):
     size = comm.Get_size()
     rank = comm.Get_rank()
     name = MPI.Get_processor_name()
-    rankl = int(os.getenv("PALS_LOCAL_RANKID"))
+    #rankl = int(os.getenv("PALS_LOCAL_RANKID"))
+    rankl = rank
     print(f"Rank {rank}/{size}, local rank {rankl} says hello from {name}", flush=True)
     comm.Barrier()
 
