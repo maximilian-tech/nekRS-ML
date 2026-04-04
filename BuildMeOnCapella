@@ -15,6 +15,15 @@ fi
 module purge
 module load release/2026  GCC/14.3.0  OpenMPI/5.0.8 Score-P/9.4-CUDA-12.9.1 CMake Python
 #...
+if [ ! -d venv ] ; then
+        python3 -m venv venv
+	. venv/bin/activate
+        python3 -m pip install --upgrade pip
+        python3 -m pip install mpi4py
+else
+	. venv/bin/activate
+fi
+
 
 #... set the build and install directories
 CWD=$PWD
@@ -23,7 +32,7 @@ export INSTALL_DIR=$NEKRS_HOME
 #...
 
 #... set some environment variables
-: ${ENABLE_SMARTREDIS:="OFF"}
+: ${ENABLE_SMARTREDIS:="ON"}
 export CC=mpicc
 export CXX=mpic++
 export FC=mpif77
