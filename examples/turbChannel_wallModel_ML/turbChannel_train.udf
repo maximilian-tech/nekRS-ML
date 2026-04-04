@@ -559,14 +559,14 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
 
   if (completed) {
+    std::cout << "Got completed" << __LINE__ << std::endl;
     if (op.header.command == 1) {
         nekrs::setEndTime(-10.0);
         nekrs::forceLastStep();
     }
 
     RDQ_ASSERT(RDQ_OK == rdq_global_feedback_op_reset(&op));
-}
-
+  }
 #endif
 }
 #ifdef SMARTREDIS
@@ -574,11 +574,13 @@ void UDF_ExecuteStep(dfloat time, int tstep)
 void UDF_Finalize()
 {
   int shard=0;
+  std::cout << "Arrived here " << __LINE__ << std::endl;
   RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);  
-
+  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_global_feedback_channel_close(&ch, &op);
+  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_global_feedback_op_free(&op);
-    
+  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_close(ctx);
   std::cout << "finalize!!!!!" << std::endl;
 }

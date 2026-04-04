@@ -24,7 +24,7 @@ try:
     import rdqpy
 except Exception as e:
     raise SystemExit(
-        f"Failed to import ddqpy. Ensure PYTHONPATH points to the built extension. Error: {e}"
+        f"Failed to import rdqpy. Ensure PYTHONPATH points to the built extension. Error: {e}"
     )
 
 
@@ -50,6 +50,7 @@ class DDQIterableDataset(IterableDataset):
                            want=self.want,
                            allow_partial=self.allow_partial,
                            prefer_zerocopy=self.prefer_zerocopy):
+            #yield torch.from_dlpack(prod)  # `prod` is your DlpackProducer
             yield torch.from_dlpack(prod)  # `prod` is your DlpackProducer
 
 class FCN(nn.Module):
@@ -83,7 +84,7 @@ def main():
     shard = 0
 
     ctx = rdqpy.Context(comm, nshards=1, owners=owners)
-    ctx.set_log(level=2, categories=0xFFFF, json=False, color=False)
+    ctx.set_log(level=4, categories=0xFFFF, json=False, color=False)
     intercomms, n_intercomm = rdqpy.create_intercomm(ml_comm)
     assert len(intercomms) == n_intercomm
     if n_intercomm != 1:
@@ -95,7 +96,7 @@ def main():
     print("here=")
     # Wrap DDQ as a streaming dataset
     dataset = DDQIterableDataset(ctx, shard=shard)
-
+    print("here=")
     # Use a single-worker DataLoader to avoid multiprocessing pickling issues
     loader = DataLoader(dataset, batch_size=1, num_workers=0)
     nNeurons = 20  # number of neuronsining settings
@@ -110,7 +111,7 @@ def main():
     optimizer = optim.Adam(
         model.parameters(), lr=learning_rate * size, weight_decay=1e-3
     )
-    
+    print("here=")
     count = 0
     for iteration, batch_l in enumerate(loader):
         # `batch` is a 1-element batch of tensors (shape: [1, rows, cols, ...])
@@ -138,7 +139,7 @@ def main():
         print(f"{iteration=} {loss.item()=}")
 
         count += 1
-        
+        #if False:
         if loss.item() < 1e-4:
             done = ch.send_progress(
                 {
