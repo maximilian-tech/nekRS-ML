@@ -4,4 +4,10 @@ module load release/2026  GCC/14.3.0 OpenMPI/5.0.8 CMake/4.0.3 Python/3.13.5
 
 export NEKRS_HOME=$PWD/nekrs_install
 
+export LD_LIBRARY_PATH=${NEKRS_HOME}/SmartRedis/install/lib64/:$LD_LIBRARY_PATH
+export PYTHONPATH=${NEKRS_HOME}/3rd_party/rdq/:$PYTHONPATH
+
+deactivate
+. venv/bin/activate
+
 
