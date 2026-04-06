@@ -1,0 +1,50 @@
+# Database config
+database:
+    launch: True
+    backend: "redis"
+    deployment: "colocated"
+    port: 6782
+    network_interface: "tcp"
+    exp_name: "nekRS-ML"
+    launcher: "local"
+
+# Run config
+run_args:
+    nodes: 1
+    db_nodes: 1
+    sim_nodes: 1
+    ml_nodes: 1
+    simprocs: 4
+    simprocs_pn: 4
+    mlprocs: 1
+    mlprocs_pn: 1
+    dbprocs_pn: 1
+    sim_cpu_bind: 
+    ml_cpu_bind: 
+    db_cpu_bind: 
+
+# Simulation config
+sim:
+    executable: "/home/max/.local/nekrs/bin/nekrs"
+    arguments: "--setup turbChannel_train.par"
+    #affinity: ""
+    copy_files: ["./turbChannel_train.usr","./turbChannel_train.par","./turbChannel_train.udf","./turbChannel_train.re2",
+                    "./udf.cmake", "./ci.oudf"]
+    link_files: [".cache"]
+
+# Trainer config
+train:
+    executable: "/home/max/repos/nekRS-ML/examples/turbChannel_wallModel_ML/trainer.py"
+    link_files: []
+    arguments: "+logging=info +device=cpu +dbnodes=1 +ppn=1"
+    #affinity: ""
+    copy_files: []
+
+
+# Inference config
+inference:
+    model_path: ""
+    backend: ""
+    device: ""
+    batch: 0
+    devices_per_node: 1

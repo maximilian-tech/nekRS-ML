@@ -318,7 +318,7 @@ def launch_clDB(cfg, nodelist, nNodes):
 
 
 ## Main function
-@hydra.main(version_base=None, config_path="./", config_name="ssim_config2")
+@hydra.main(version_base=None, config_path="./", config_name="ssim_config")
 def main(cfg: DictConfig):
     # Get nodes of this allocation (job)
     nodelist = nNodes = None
