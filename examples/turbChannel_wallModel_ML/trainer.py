@@ -428,7 +428,8 @@ def main(cfg: DictConfig):
             train_tensor_loader = DataLoader(
                 datasetTrain, batch_size=batch, sampler=train_sampler
             )
-
+        else:
+            continue
         if rank == 0:
             print(f"\n Epoch {iepoch}\n-------------------------------", flush=True)
 
@@ -487,7 +488,8 @@ def main(cfg: DictConfig):
 
     # Exit and tell data loader to exit too
     comm.Barrier()
-    if rank % cfg.ppn == 0:
+    if False:
+    #if rank % cfg.ppn == 0:
         print(f"[{rank}]: Telling NEKRS to quit ... \n")
         arrMLrun = np.int32(np.zeros(1))
         client.put_tensor("check-run", arrMLrun)

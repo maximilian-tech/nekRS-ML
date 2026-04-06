@@ -527,7 +527,7 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   tavg::run(time);
 
   // Send training data for model every set number of steps
-  if (tstep%1==0 && tstep>0) {
+  if (tstep%2==0 && tstep>0) {
     auto o_avg = tavg::o_avg();
     calcTauWall(nrs, time, tstep, o_avg); //calculates shear stress in volume
     updateRecycledVelocity(nrs, o_avg, verbose); //interpolates velocity on off-wall nodes
@@ -558,7 +558,6 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     nekrs::forceLastStep();
   }
 #elif defined(KASANE)
-  std::cout << "Arrived here " << __LINE__ << std::endl;
   int completed = 0;
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
 
@@ -578,14 +577,10 @@ void UDF_ExecuteStep(dfloat time, int tstep)
 void UDF_Finalize()
 {
   int shard=0;
-  std::cout << "Arrived here " << __LINE__ << std::endl;
   RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);  
-  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_global_feedback_channel_close(&ch, &op);
-  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_global_feedback_op_free(&op);
-  std::cout << "Arrived here " << __LINE__ << std::endl;
   rdq_close(ctx);
-  std::cout << "finalize!!!!!" << std::endl;
+  std::cout << "Finalize" << std::endl;
 }
 #endif

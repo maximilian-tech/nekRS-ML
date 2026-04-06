@@ -175,9 +175,9 @@ def main():
     # Treat this rank as the owner (consumer); producers should agree.
     owners = [rank]
     shard = 0
-
+    
     ctx = rdqpy.Context(comm, nshards=1, owners=owners)
-    ctx.set_log(level=4, categories=0xFFFF, json=False, color=False)
+    ctx.set_log(level=2, categories=0xFFFF, json=False, color=False)
     intercomms, n_intercomm = rdqpy.create_intercomm(ml_comm)
     assert len(intercomms) == n_intercomm
     if n_intercomm != 1:
@@ -186,6 +186,7 @@ def main():
     intercomm = intercomms[0]
     ch = rdqpy.GlobalFeedbackChannel(ml_comm, intercomm, is_sender_group=True, root_rank=0)
     # Wrap DDQ as a streaming dataset
+    torch.manual_seed(0)
     dataset = DDQIterableDataset(ctx, shard=shard)
     # Use a single-worker DataLoader to avoid multiprocessing pickling issues
     loader = DataLoader(dataset, batch_size=1, num_workers=0)
@@ -244,11 +245,13 @@ def main():
             and replay.seen >= REPLAY_WARMUP
             and replay.can_sample(rep_n)
         ):
+            print("Sampling from replay buffer")
             rep_batch = replay.sample(rep_n, device=cur_batch.device, non_blocking=True)
 
         if rep_batch is None or rep_batch.numel() == 0:
             mixed_batch = cur_batch
         else:
+            print("Using replay buffer")
             mixed_batch = torch.cat([cur_batch, rep_batch], dim=0)
 
         features = mixed_batch[:, :ndIn]
