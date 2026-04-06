@@ -29,6 +29,12 @@ except Exception as e:
 
 from replay import ReplayBuffer
 
+REPLAY_ENABLE = True
+REPLAY_CAPACITY = 200_000
+REPLAY_HARD_CAPACITY = 50_000
+REPLAY_HARD_MIX = 0.15
+REPLAY_BATCH = 2048
+REPLAY_WARMUP = 6_000
 
 def stream(ctx, shard, *, want=1, allow_partial=False, prefer_zerocopy=False):
     while True:
@@ -104,11 +110,6 @@ def main():
     
     learning_rate = 0.001  # learning rate
 
-    REPLAY_CAPACITY = 200_000
-    REPLAY_HARD_CAPACITY = 50_000
-    REPLAY_HARD_MIX = 0.15
-    REPLAY_BATCH = 2048
-    REPLAY_WARMUP = 6_000
     model = FCN(input_size=ndIn, hidden_size=nNeurons, output_size=ndOut).to(torch.float64)
     loss_fn = nn.functional.mse_loss
     
@@ -116,15 +117,17 @@ def main():
         model.parameters(), lr=learning_rate * size, weight_decay=1e-3
     )
 
-    replay = ReplayBuffer(
-        dim=ndIn + ndOut,
-        capacity=REPLAY_CAPACITY,
-        hard_capacity=REPLAY_HARD_CAPACITY,
-        hard_mix=REPLAY_HARD_MIX,
-        pin_memory=True,
-        seed=54321 + rank,
-        dtype=torch.float64,
-    )
+    replay = None
+    if REPLAY_ENABLE:
+        replay = ReplayBuffer(
+            dim=ndIn + ndOut,
+            capacity=REPLAY_CAPACITY,
+            hard_capacity=REPLAY_HARD_CAPACITY,
+            hard_mix=REPLAY_HARD_MIX,
+            pin_memory=True,
+            seed=REPLAY_SEED + rank,
+            dtype=torch.float64,
+        )
 
     print("here=")
     count = 0
@@ -143,7 +146,12 @@ def main():
 
         rep_n = min(REPLAY_BATCH, max(0, int(2 * B)))
         rep_batch = None
-        if replay.seen >= REPLAY_WARMUP and replay.can_sample(rep_n):
+        if (
+            REPLAY_ENABLE
+            and replay is not None
+            and replay.seen >= REPLAY_WARMUP
+            and replay.can_sample(rep_n)
+        ):
             rep_batch = replay.sample(rep_n, device=cur_batch.device, non_blocking=True)
 
         if rep_batch is None or rep_batch.numel() == 0:
@@ -164,8 +172,9 @@ def main():
         cur_target = target[:B]
         cur_elem_loss = loss_fn(cur_output, cur_target, reduction="none")
         per_sample_loss_cur = cur_elem_loss.reshape(B, -1).mean(dim=1)
-        with torch.no_grad():
-            replay.add(cur_batch, losses=per_sample_loss_cur.detach())
+        if REPLAY_ENABLE and replay is not None:
+            with torch.no_grad():
+                replay.add(cur_batch, losses=per_sample_loss_cur.detach())
 
         loss = loss_fn(output, target)
         loss.backward()
