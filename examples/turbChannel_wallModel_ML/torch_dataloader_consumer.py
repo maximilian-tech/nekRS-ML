@@ -35,6 +35,7 @@ REPLAY_HARD_CAPACITY = 50_000
 REPLAY_HARD_MIX = 0.15
 REPLAY_BATCH = 2048
 REPLAY_WARMUP = 6_000
+REPLAY_SEED = 54321
 
 def stream(ctx, shard, *, want=1, allow_partial=False, prefer_zerocopy=False):
     while True:
