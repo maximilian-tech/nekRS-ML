@@ -91,12 +91,9 @@ def main():
         raise RuntimeError(f"Expected exactly one intercommunicator, got {n_intercomm}")
 
     intercomm = intercomms[0]
-    print("here=")
     ch = rdqpy.GlobalFeedbackChannel(ml_comm, intercomm, is_sender_group=True, root_rank=0)
-    print("here=")
     # Wrap DDQ as a streaming dataset
     dataset = DDQIterableDataset(ctx, shard=shard)
-    print("here=")
     # Use a single-worker DataLoader to avoid multiprocessing pickling issues
     loader = DataLoader(dataset, batch_size=1, num_workers=0)
     nNeurons = 20  # number of neuronsining settings
@@ -139,8 +136,8 @@ def main():
         print(f"{iteration=} {loss.item()=}")
 
         count += 1
-        #if False:
-        if loss.item() < 1e-4:
+        if False:
+        #if loss.item() < 1e-4:
             done = ch.send_progress(
                 {
                     "seq": 1,
