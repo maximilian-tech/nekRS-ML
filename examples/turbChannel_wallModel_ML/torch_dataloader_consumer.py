@@ -78,6 +78,37 @@ class FCN(nn.Module):
         return x
 
 
+class DataBuffer:
+    """Simple append-only buffer for accumulated training samples."""
+
+    def __init__(self):
+        self._chunks = []
+        self._cached = None
+        self._nrows = 0
+
+    @property
+    def nrows(self):
+        return self._nrows
+
+    def add(self, batch):
+        if batch is None or batch.numel() == 0:
+            return
+        chunk = batch.detach()
+        if chunk.is_cuda:
+            chunk = chunk.to("cpu", non_blocking=False)
+        chunk = chunk.contiguous()
+        self._chunks.append(chunk)
+        self._cached = None
+        self._nrows += chunk.shape[0]
+
+    def as_tensor(self):
+        if self._cached is None:
+            if not self._chunks:
+                return None
+            self._cached = torch.cat(self._chunks, dim=0)
+        return self._cached
+
+
 def split_train_validation(batch, validation_split):
     batch_size = batch.shape[0]
     if batch_size <= 1 or validation_split <= 0.0:
@@ -107,6 +138,26 @@ def regression_accuracy(prediction, target):
             device=target.device,
         )
     return 1.0 - (ss_res / ss_tot)
+
+
+def evaluate_buffer_loss(model, loss_fn, data_buffer, ndIn):
+    buffer_tensor = data_buffer.as_tensor()
+    if buffer_tensor is None or buffer_tensor.numel() == 0:
+        return None
+
+    device = next(model.parameters()).device
+    dtype = next(model.parameters()).dtype
+    buffer_tensor = buffer_tensor.to(device=device, dtype=dtype, non_blocking=False)
+    buffer_features = buffer_tensor[:, :ndIn]
+    buffer_target = buffer_tensor[:, ndIn:]
+
+    model.eval()
+    with torch.no_grad():
+        buffer_output = model.forward(buffer_features)
+        buffer_loss = loss_fn(buffer_output, buffer_target).item()
+    model.train()
+
+    return buffer_loss
 
 
 def main():
@@ -152,6 +203,7 @@ def main():
     )
 
     replay = None
+    data_buffer = DataBuffer()
     if REPLAY_ENABLE:
         replay = ReplayBuffer(
             dim=ndIn + ndOut,
@@ -222,12 +274,22 @@ def main():
 
         train_loss = loss.item()
         running_train_loss += train_loss
+        data_buffer.add(cur_batch)
+        buffer_loss = evaluate_buffer_loss(model, loss_fn, data_buffer, ndIn)
 
         metrics = [
             f"iteration={iteration}",
             f"train_loss={train_loss:.6e}",
             f"train_loss_avg={running_train_loss / (iteration + 1):.6e}",
         ]
+
+        if buffer_loss is not None:
+            metrics.extend(
+                [
+                    f"buffer_loss={buffer_loss:.6e}",
+                    f"buffer_rows={data_buffer.nrows}",
+                ]
+            )
 
         if val_batch is not None:
             val_features = val_batch[:, :ndIn]
