@@ -54,6 +54,10 @@ static rdq_global_feedback_op_t op;
 #include "ci.oudf"
 #endif
 
+#if defined(KASANE) && defined(SMARTREDIS)
+#error "Cannot have both KASANE and SMARTREDIS defined"
+#endif
+
 /* User Functions */
 
 //void planarAverage(nrs_t *nrs)
@@ -368,8 +372,8 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   platform->par->extract("casedata", "number_elements_y", NUMBER_ELEMENTS_Y);
   platform->par->extract("casedata", "number_elements_z", NUMBER_ELEMENTS_Z);
   platform->par->extract("casedata", "tAvgWriteInterval", tAvgWriteInterval);
-#ifdef SMARTREDIS
-#else
+#if defined(SMARTREDIS)
+#elif defined(KASANE)
   const int nshards = 1;
   int shard = 0;
   int size;
@@ -445,7 +449,7 @@ void UDF_Setup()
   o_BdryToV.copyTo(BdryToV, BdryToV.size());
 
   // Initialize SmartRedis client
-#ifdef SMARTREDIS
+#if defined(SMARTREDIS)
   client = new smartredis_client_t(nrs);
   client->init_check_run();
   client->init_wallModel_train(npts);
@@ -458,8 +462,8 @@ void UDF_Setup()
 //#################################################
 
 
-#ifdef SMARTREDIS
-#else
+#if defined(SMARTREDIS)
+#elif defined(KASANE)
 void put_wallModel_data(
         std::vector<dfloat> wall_shear_stress, 
         std::vector<dlong> BdryToV, 
@@ -528,13 +532,13 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     calcTauWall(nrs, time, tstep, o_avg); //calculates shear stress in volume
     updateRecycledVelocity(nrs, o_avg, verbose); //interpolates velocity on off-wall nodes
     o_Upart.copyTo(Upart); //copy from occa mem to CPU mem
-#ifdef SMARTREDIS
+#if defined(SMARTREDIS)
     client->put_wallModel_data(usrwrk, BdryToV, Upart, tstep);
-#else
+#elif defined(KASANE)
     put_wallModel_data(usrwrk, BdryToV, Upart, tstep);
 #endif
     MPI_Barrier(platform->comm.mpiComm);
-#ifdef SMARTREDIS
+#if defined(SMARTREDIS)
     client->put_step_num(tstep);
 #endif
     if (platform->comm.mpiRank == 0)
@@ -547,13 +551,13 @@ void UDF_ExecuteStep(dfloat time, int tstep)
 
   
   // Every time step check if ML training says it is time to quit
-#ifdef SMARTREDIS
+#if defined(SMARTREDIS)
   int exit_val = client->check_run();
   if (exit_val==0) {
     nekrs::setEndTime(-10.0);
     nekrs::forceLastStep();
   }
-#else
+#elif defined(KASANE)
   std::cout << "Arrived here " << __LINE__ << std::endl;
   int completed = 0;
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
@@ -569,8 +573,8 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   }
 #endif
 }
-#ifdef SMARTREDIS
-#else
+#if defined(SMARTREDIS)
+#elif defined(KASANE)
 void UDF_Finalize()
 {
   int shard=0;

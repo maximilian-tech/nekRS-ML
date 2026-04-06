@@ -33,4 +33,4 @@ tWallAvg = 10.0
 number_elements_x = 36
 number_elements_y = 16
 number_elements_z = 18
-tAvgWriteInterval = 4
+tAvgWriteInterval = 40
