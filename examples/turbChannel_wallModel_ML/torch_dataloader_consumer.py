@@ -255,7 +255,7 @@ def main():
             mixed_batch = torch.cat([cur_batch, rep_batch], dim=0)
 
         features = mixed_batch[:, :ndIn]
-        #print(f"{features.shape=}",flush=True)
+        print(f"{features.mean()=}, {features.std()=}",flush=True)
         target = mixed_batch[:, ndIn:]
         #print(f"{target.shape=}",flush=True)
         
@@ -304,13 +304,13 @@ def main():
                 val_mae = torch.mean(torch.abs(val_output - val_target)).item()
                 val_r2 = regression_accuracy(val_output, val_target).item()
             model.train()
+            if(iteration > 50):
+                running_val_loss += val_loss
+                running_val_mae += val_mae
+                running_val_r2 += val_r2
+                n_val_steps += 1
 
-            running_val_loss += val_loss
-            running_val_mae += val_mae
-            running_val_r2 += val_r2
-            n_val_steps += 1
-
-            metrics.extend(
+                metrics.extend(
                 [
                     f"val_loss={val_loss:.6e}",
                     f"val_mae={val_mae:.6e}",

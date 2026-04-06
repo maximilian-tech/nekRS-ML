@@ -239,11 +239,11 @@ def train(
             #          f'[{tensor_idx+1}/{len(train_tensor_loader)}] | ' + \
             #          f'[{batch_idx+1}/{len(train_loader)}] | ' + \
             #          f'Loss: {loss.item():>8e}', flush=True)
-
+    calculate_avg = True if (epoch * 6) > 50 else False
     loss_avg = global_mean(comm, running_loss, n_train_batches)
-    val_loss_avg = global_mean(comm, running_val_loss, n_val_batches)
-    val_mae_avg = global_mean(comm, running_val_mae, n_val_batches)
-    val_r2_avg = global_mean(comm, running_val_r2, n_val_batches)
+    val_loss_avg = global_mean(comm, running_val_loss, n_val_batches if calculate_avg else 0 )
+    val_mae_avg = global_mean(comm, running_val_mae, n_val_batches if calculate_avg else 0)
+    val_r2_avg = global_mean(comm, running_val_r2, n_val_batches if calculate_avg else 0)
 
     ##local_residuals = (target - output).detach().to('cpu')
     # local_residuals = (target - output).detach()
@@ -300,7 +300,7 @@ def main(cfg: DictConfig):
     rankl = rank
     print(f"Rank {rank}/{size}, local rank {rankl} says hello from {name}", flush=True)
     comm.Barrier()
-
+    torch.manual_seed(0)
     # Create log files
     time_meta = 0.0
     if cfg.logging == "verbose":
