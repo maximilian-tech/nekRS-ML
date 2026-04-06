@@ -26,6 +26,9 @@ from torch.distributed import all_gather
 # SmartRedis imports
 from smartredis import Client
 
+VALIDATION_SPLIT = 0.2
+VALIDATION_MIN_SAMPLES = 1
+
 
 ## Define logger
 def setup_logger(name, log_file, level=logging.INFO):
@@ -119,6 +122,37 @@ class MinibDataset(torch.utils.data.Dataset):
         return self.concat_tensor[idx]
 
 
+def split_train_validation(batch, validation_split):
+    batch_size = batch.shape[0]
+    if batch_size <= 1 or validation_split <= 0.0:
+        return batch, None
+
+    n_val = int(batch_size * validation_split)
+    n_val = max(VALIDATION_MIN_SAMPLES, n_val)
+    n_val = min(n_val, batch_size - 1)
+    if n_val <= 0:
+        return batch, None
+
+    perm = torch.randperm(batch_size, device=batch.device)
+    val_idx = perm[:n_val]
+    train_idx = perm[n_val:]
+    return batch[train_idx], batch[val_idx]
+
+
+def regression_accuracy(prediction, target):
+    target_mean = target.mean(dim=0, keepdim=True)
+    ss_tot = torch.sum((target - target_mean) ** 2)
+    ss_res = torch.sum((target - prediction) ** 2)
+    eps = torch.finfo(target.dtype).eps
+    if ss_tot.abs() <= eps:
+        return torch.tensor(
+            1.0 if ss_res.abs() <= eps else 0.0,
+            dtype=target.dtype,
+            device=target.device,
+        )
+    return 1.0 - (ss_res / ss_tot)
+
+
 ## Training subroutine
 def train(
     comm,
@@ -138,6 +172,11 @@ def train(
 
     model.train()
     running_loss = 0.0
+    running_val_loss = 0.0
+    running_val_mae = 0.0
+    running_val_r2 = 0.0
+    n_train_batches = 0
+    n_val_batches = 0
     train_sampler.set_epoch(epoch)
 
     loss_fn = nn.functional.mse_loss
@@ -161,11 +200,17 @@ def train(
             # with this very small model, slow down training a little for purpses of example problem
             sleep(0.001)
 
+            train_batch, val_batch = split_train_validation(dbdata, VALIDATION_SPLIT)
+            if len(train_batch) == 0:
+                continue
+
             # split inputs and outputs
             if cfg.device != "cpu":
-                dbdata = dbdata.to(cfg.device)
-            features = dbdata[:, :ndIn]
-            target = dbdata[:, ndIn:]
+                train_batch = train_batch.to(cfg.device)
+                if val_batch is not None:
+                    val_batch = val_batch.to(cfg.device)
+            features = train_batch[:, :ndIn]
+            target = train_batch[:, ndIn:]
 
             optimizer.zero_grad()
             output = model.forward(features)
@@ -173,6 +218,21 @@ def train(
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            n_train_batches += 1
+
+            if val_batch is not None:
+                val_features = val_batch[:, :ndIn]
+                val_target = val_batch[:, ndIn:]
+                model.eval()
+                with torch.no_grad():
+                    val_output = model.forward(val_features)
+                    running_val_loss += loss_fn(val_output, val_target).item()
+                    running_val_mae += torch.mean(
+                        torch.abs(val_output - val_target)
+                    ).item()
+                    running_val_r2 += regression_accuracy(val_output, val_target).item()
+                n_val_batches += 1
+                model.train()
 
             # if ((batch_idx)%10==0):
             #    print(f'Train Epoch: {epoch} | ' + \
@@ -180,8 +240,10 @@ def train(
             #          f'[{batch_idx+1}/{len(train_loader)}] | ' + \
             #          f'Loss: {loss.item():>8e}', flush=True)
 
-    running_loss = running_loss / len(train_loader) / len(train_tensor_loader)
-    loss_avg = metric_average(comm, size, running_loss)
+    loss_avg = global_mean(comm, running_loss, n_train_batches)
+    val_loss_avg = global_mean(comm, running_val_loss, n_val_batches)
+    val_mae_avg = global_mean(comm, running_val_mae, n_val_batches)
+    val_r2_avg = global_mean(comm, running_val_r2, n_val_batches)
 
     ##local_residuals = (target - output).detach().to('cpu')
     # local_residuals = (target - output).detach()
@@ -195,6 +257,14 @@ def train(
 
     if rank == 0:
         print(f"Training set: Average loss: {loss_avg:>8e}", flush=True)
+        if val_loss_avg is not None:
+            print(
+                "Validation set: "
+                f"Average loss: {val_loss_avg:>8e}, "
+                f"Average MAE: {val_mae_avg:>8e}, "
+                f"Average R2: {val_r2_avg:>8e}",
+                flush=True,
+            )
         # np.savetxt(f"residuals_epoch_{epoch}.csv", all_residuals, delimiter=",")
 
         # residuals = (target - output).detach().to('cpu').numpy()
@@ -208,6 +278,14 @@ def metric_average(comm, size, val):
     avg_val = comm.allreduce(val, op=MPI.SUM)
     avg_val = avg_val / size
     return avg_val
+
+
+def global_mean(comm, value_sum, count):
+    global_sum = comm.allreduce(value_sum, op=MPI.SUM)
+    global_count = comm.allreduce(count, op=MPI.SUM)
+    if global_count == 0:
+        return None
+    return global_sum / global_count
 
 
 ## Main
