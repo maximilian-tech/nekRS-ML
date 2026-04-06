@@ -36,6 +36,8 @@ REPLAY_HARD_MIX = 0.15
 REPLAY_BATCH = 2048
 REPLAY_WARMUP = 6_000
 REPLAY_SEED = 54321
+VALIDATION_SPLIT = 0.2
+VALIDATION_MIN_SAMPLES = 1
 
 def stream(ctx, shard, *, want=1, allow_partial=False, prefer_zerocopy=False):
     while True:
@@ -74,6 +76,37 @@ class FCN(nn.Module):
         x = self.relu(x)
         x = self.fc2(x)
         return x
+
+
+def split_train_validation(batch, validation_split):
+    batch_size = batch.shape[0]
+    if batch_size <= 1 or validation_split <= 0.0:
+        return batch, None
+
+    n_val = int(batch_size * validation_split)
+    n_val = max(VALIDATION_MIN_SAMPLES, n_val)
+    n_val = min(n_val, batch_size - 1)
+    if n_val <= 0:
+        return batch, None
+
+    perm = torch.randperm(batch_size, device=batch.device)
+    val_idx = perm[:n_val]
+    train_idx = perm[n_val:]
+    return batch[train_idx], batch[val_idx]
+
+
+def regression_accuracy(prediction, target):
+    target_mean = target.mean(dim=0, keepdim=True)
+    ss_tot = torch.sum((target - target_mean) ** 2)
+    ss_res = torch.sum((target - prediction) ** 2)
+    eps = torch.finfo(target.dtype).eps
+    if ss_tot.abs() <= eps:
+        return torch.tensor(
+            1.0 if ss_res.abs() <= eps else 0.0,
+            dtype=target.dtype,
+            device=target.device,
+        )
+    return 1.0 - (ss_res / ss_tot)
 
 
 def main():
@@ -132,6 +165,11 @@ def main():
 
     print("here=")
     count = 0
+    running_train_loss = 0.0
+    running_val_loss = 0.0
+    running_val_mae = 0.0
+    running_val_r2 = 0.0
+    n_val_steps = 0
     for iteration, batch_l in enumerate(loader):
         # `batch` is a 1-element batch of tensors (shape: [1, rows, cols, ...])
         # Access the tensor content as batch[0]
@@ -142,7 +180,8 @@ def main():
         #t = None
         
         #print(f"{batch.shape=}",flush=True)
-        cur_batch = batch
+        train_batch, val_batch = split_train_validation(batch, VALIDATION_SPLIT)
+        cur_batch = train_batch
         B = cur_batch.shape[0]
 
         rep_n = min(REPLAY_BATCH, max(0, int(2 * B)))
@@ -181,7 +220,43 @@ def main():
         loss.backward()
         optimizer.step()
 
-        print(f"{iteration=} {loss.item()=}")
+        train_loss = loss.item()
+        running_train_loss += train_loss
+
+        metrics = [
+            f"iteration={iteration}",
+            f"train_loss={train_loss:.6e}",
+            f"train_loss_avg={running_train_loss / (iteration + 1):.6e}",
+        ]
+
+        if val_batch is not None:
+            val_features = val_batch[:, :ndIn]
+            val_target = val_batch[:, ndIn:]
+            model.eval()
+            with torch.no_grad():
+                val_output = model.forward(val_features)
+                val_loss = loss_fn(val_output, val_target).item()
+                val_mae = torch.mean(torch.abs(val_output - val_target)).item()
+                val_r2 = regression_accuracy(val_output, val_target).item()
+            model.train()
+
+            running_val_loss += val_loss
+            running_val_mae += val_mae
+            running_val_r2 += val_r2
+            n_val_steps += 1
+
+            metrics.extend(
+                [
+                    f"val_loss={val_loss:.6e}",
+                    f"val_mae={val_mae:.6e}",
+                    f"val_r2={val_r2:.6e}",
+                    f"val_loss_avg={running_val_loss / n_val_steps:.6e}",
+                    f"val_mae_avg={running_val_mae / n_val_steps:.6e}",
+                    f"val_r2_avg={running_val_r2 / n_val_steps:.6e}",
+                ]
+            )
+
+        print(" ".join(metrics))
 
         count += 1
         if False:
@@ -209,4 +284,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
