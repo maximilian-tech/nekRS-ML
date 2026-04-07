@@ -324,7 +324,8 @@ def main():
         print(" ".join(metrics))
 
         count += 1
-        if False:
+        #if False:
+        if count >= 300*6:
         #if loss.item() < 1e-4:
             done = ch.send_progress(
                 {

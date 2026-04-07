@@ -199,7 +199,7 @@ def train(
         train_loader = DataLoader(mbdata, shuffle=True, batch_size=batch)
         for batch_idx, dbdata in enumerate(train_loader):
             # with this very small model, slow down training a little for purpses of example problem
-            sleep(0.001)
+            #sleep(0.001)
 
             train_batch, val_batch = split_train_validation(dbdata,0) #VALIDATION_SPLIT)
             if len(train_batch) == 0:
@@ -257,7 +257,7 @@ def train(
     # all_residuals = torch.cat(residual_list, dim=0).to('cpu').numpy()
 
     if rank == 0:
-        print(f"Training set: Average dataset loss: {loss_avg:>8e}", flush=True)
+        print(f"Training set: {epoch=}, Average dataset loss: {loss_avg:>8e}", flush=True)
         val_loss_avg = None
         if val_loss_avg is not None:
             print(
@@ -417,7 +417,8 @@ def main(cfg: DictConfig):
         # new data is available in database so update Dataset and DataLoader
         if istep != tmp[0]:
             istep = tmp[0]
-            step_list.append(istep)
+            #step_list.append(istep)
+            step_list = range(31,istep+1)
             batch = int(num_db_tensors * len(step_list) / cfg.ppn)
             if rank == 0:
                 print("\nGetting new training data from DB ...")
@@ -466,6 +467,13 @@ def main(cfg: DictConfig):
                     flush=True,
                 )
             break
+        if istep >= 300:
+            if rank == 0:
+                print(
+                    "\nMax number of epochs reached. Stopping training loop. \n",
+                    flush=True,
+                )
+            break
 
         iepoch = iepoch + 1
 
@@ -490,8 +498,8 @@ def main(cfg: DictConfig):
 
     # Exit and tell data loader to exit too
     comm.Barrier()
-    if False:
-    #if rank % cfg.ppn == 0:
+    #if False:
+    if rank % cfg.ppn == 0:
         print(f"[{rank}]: Telling NEKRS to quit ... \n")
         arrMLrun = np.int32(np.zeros(1))
         client.put_tensor("check-run", arrMLrun)
