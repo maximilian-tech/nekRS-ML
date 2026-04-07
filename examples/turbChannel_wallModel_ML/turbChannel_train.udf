@@ -527,7 +527,7 @@ void UDF_ExecuteStep(dfloat time, int tstep)
   tavg::run(time);
 
   // Send training data for model every set number of steps
-  if (tstep%2==0 && tstep>0) {
+  if (tstep%1==0 && tstep>30) {
     auto o_avg = tavg::o_avg();
     calcTauWall(nrs, time, tstep, o_avg); //calculates shear stress in volume
     updateRecycledVelocity(nrs, o_avg, verbose); //interpolates velocity on off-wall nodes
