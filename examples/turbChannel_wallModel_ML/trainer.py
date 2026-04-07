@@ -193,14 +193,15 @@ def train(
         if cfg.logging == "verbose":
             logger_data.info("%.8e", toc - tic)
         concat_tensor = concat_tensor.float()
-
+        loss_minibatch = 0
+       
         mbdata = MinibDataset(concat_tensor)
         train_loader = DataLoader(mbdata, shuffle=True, batch_size=batch)
         for batch_idx, dbdata in enumerate(train_loader):
             # with this very small model, slow down training a little for purpses of example problem
             sleep(0.001)
 
-            train_batch, val_batch = split_train_validation(dbdata, VALIDATION_SPLIT)
+            train_batch, val_batch = split_train_validation(dbdata,0) #VALIDATION_SPLIT)
             if len(train_batch) == 0:
                 continue
 
@@ -256,7 +257,8 @@ def train(
     # all_residuals = torch.cat(residual_list, dim=0).to('cpu').numpy()
 
     if rank == 0:
-        print(f"Training set: Average loss: {loss_avg:>8e}", flush=True)
+        print(f"Training set: Average dataset loss: {loss_avg:>8e}", flush=True)
+        val_loss_avg = None
         if val_loss_avg is not None:
             print(
                 "Validation set: "
