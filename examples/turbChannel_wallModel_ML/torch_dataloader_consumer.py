@@ -29,7 +29,7 @@ except Exception as e:
 
 from replay import ReplayBuffer
 
-REPLAY_ENABLE = True
+REPLAY_ENABLE = os.getenv("REPLAY_ENABLE","false").lower() in {"1", "true", "yes", "on"}
 REPLAY_CAPACITY = 200_000
 REPLAY_HARD_CAPACITY = 50_000
 REPLAY_HARD_MIX = 0.15
