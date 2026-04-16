@@ -177,6 +177,8 @@ def train(
     running_val_r2 = 0.0
     n_train_batches = 0
     n_val_batches = 0
+    n_train_mae_terms = 0
+    running_mae = 0.0
     train_sampler.set_epoch(epoch)
 
     loss_fn = nn.functional.mse_loss
@@ -187,7 +189,7 @@ def train(
             print(f"[{rank}]: Grabbing tensors with key {tensor_keys}", flush=True)
         tic = perf_counter()
         concat_tensor = torch.cat(
-            [torch.from_numpy(client.get_tensor(key)) for key in tensor_keys], dim=0
+            [torch.from_numpy(client.get_tensor(key)) for key in tensor_keys if client.key_exists(key)], dim=0
         )
         toc = perf_counter()
         if cfg.logging == "verbose":
@@ -216,9 +218,12 @@ def train(
             optimizer.zero_grad()
             output = model.forward(features)
             loss = loss_fn(output, target)
+            abs_error = torch.abs(output - target)
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            running_mae += abs_error.sum().item()
+            n_train_mae_terms += abs_error.numel()
             n_train_batches += 1
 
             if val_batch is not None:
@@ -242,6 +247,7 @@ def train(
             #          f'Loss: {loss.item():>8e}', flush=True)
     calculate_avg = True if (epoch * 6) > 50 else False
     loss_avg = global_mean(comm, running_loss, n_train_batches)
+    train_mae_avg = global_mean(comm, running_mae, n_train_mae_terms)
     val_loss_avg = global_mean(comm, running_val_loss, n_val_batches if calculate_avg else 0 )
     val_mae_avg = global_mean(comm, running_val_mae, n_val_batches if calculate_avg else 0)
     val_r2_avg = global_mean(comm, running_val_r2, n_val_batches if calculate_avg else 0)
@@ -257,7 +263,7 @@ def train(
     # all_residuals = torch.cat(residual_list, dim=0).to('cpu').numpy()
 
     if rank == 0:
-        print(f"Training set: {epoch=}, Average dataset loss: {loss_avg:>8e}", flush=True)
+        print(f"Training set: {epoch=}, MAE loss dataset={train_mae_avg:>8e}  Average dataset loss: {loss_avg:>8e}", flush=True)
         val_loss_avg = None
         if val_loss_avg is not None:
             print(
@@ -418,7 +424,7 @@ def main(cfg: DictConfig):
         if istep != tmp[0]:
             istep = tmp[0]
             #step_list.append(istep)
-            step_list = range(31,istep+1)
+            step_list = range(100,istep+1,100)
             batch = int(num_db_tensors * len(step_list) / cfg.ppn)
             if rank == 0:
                 print("\nGetting new training data from DB ...")
@@ -467,7 +473,7 @@ def main(cfg: DictConfig):
                     flush=True,
                 )
             break
-        if istep >= 300:
+        if istep >= 6500:
             if rank == 0:
                 print(
                     "\nMax number of epochs reached. Stopping training loop. \n",

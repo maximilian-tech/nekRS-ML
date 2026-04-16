@@ -14,8 +14,8 @@ run_args:
     db_nodes: 1
     sim_nodes: 1
     ml_nodes: 1
-    simprocs: 6
-    simprocs_pn: 6
+    simprocs: 120
+    simprocs_pn: 120
     mlprocs: 1
     mlprocs_pn: 1
     dbprocs_pn: 1

@@ -68,12 +68,15 @@ class FCN(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
         super(FCN, self).__init__()
         self.fc1 = nn.Linear(input_size, hidden_size)
-        self.relu = nn.ReLU()
+        #self.relu = nn.ReLU()
+        self.tanh = nn.Tanh()
         self.fc2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):
         x = self.fc1(x)
-        x = self.relu(x)
+        #x = self.relu(x)
+        x = self.tanh(x)
+
         x = self.fc2(x)
         return x
 
@@ -155,9 +158,10 @@ def evaluate_buffer_loss(model, loss_fn, data_buffer, ndIn):
     with torch.no_grad():
         buffer_output = model.forward(buffer_features)
         buffer_loss = loss_fn(buffer_output, buffer_target).item()
+        buffer_mae = torch.abs(buffer_output - buffer_target).mean().item()
     model.train()
 
-    return buffer_loss
+    return buffer_loss,buffer_mae
 
 
 def main():
@@ -228,6 +232,7 @@ def main():
         # Access the tensor content as batch[0]
         batch = batch_l[0]
         # Simple side-effect to confirm progress
+        count += 1
         
         print(f"[consumer rank {rank}] received tensor {count}: shape={tuple(batch.shape)}, dtype={batch.dtype}",flush=True)
         #t = None
@@ -266,9 +271,9 @@ def main():
         cur_output = output[:B]
         cur_target = target[:B]
         cur_elem_loss = loss_fn(cur_output, cur_target, reduction="none")
-        per_sample_loss_cur = cur_elem_loss.reshape(B, -1).mean(dim=1)
         if REPLAY_ENABLE and replay is not None:
             with torch.no_grad():
+                per_sample_loss_cur = cur_elem_loss.reshape(B, -1).mean(dim=1)
                 replay.add(cur_batch, losses=per_sample_loss_cur.detach())
 
         loss = loss_fn(output, target)
@@ -278,7 +283,9 @@ def main():
         train_loss = loss.item()
         running_train_loss += train_loss
         data_buffer.add(cur_batch)
-        buffer_loss = evaluate_buffer_loss(model, loss_fn, data_buffer, ndIn)
+        buffer_loss,buffer_mae = evaluate_buffer_loss(model, loss_fn, data_buffer, ndIn)
+        
+        print(f" {cur_output.mean()=}, {cur_output.std()=}  {cur_target.mean()=}, {cur_target.std()=}")
 
         metrics = [
             f"iteration={iteration}",
@@ -290,6 +297,7 @@ def main():
             metrics.extend(
                 [
                     f"buffer_loss={buffer_loss:.6e}",
+                    f"buffer_loss={buffer_mae:.6e}",
                     f"buffer_rows={data_buffer.nrows}",
                 ]
             )
@@ -323,10 +331,9 @@ def main():
 
         print(" ".join(metrics))
 
-        count += 1
         #if False:
-        if count >= 300*6:
-        #if loss.item() < 1e-4:
+        #if count >= 270*6: # Skip 30 from the beginning
+        if (loss.item() < 1e-10) or (count > 35 * 125):
             done = ch.send_progress(
                 {
                     "seq": 1,

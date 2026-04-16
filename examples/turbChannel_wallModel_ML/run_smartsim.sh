@@ -33,13 +33,15 @@ sed -i 's|^#target_compile_definitions(udf PUBLIC SMARTREDIS=1)|target_compile_d
 export REPLAY_ENABLE=no
 
 
-export DEFAULT_NUM_RANKS=6
+export DEFAULT_NUM_RANKS=120
 export PALS_LOCAL_SIZE=${SIM_RANKS:-${DEFAULT_NUM_RANKS}}
 
 export REPS=3
 
+rm -rf .cache/udf
+mpiexec -n 6 -- $NEKRS_HOME/bin/nekrs --setup turbChannel_train --build-only 6
+
 for idx in $(seq "$REPS"); do
-  rm -rf .cache/udf
   killall redis-server 2>/dev/null || true
 
   python3 ./ssim_driver.py
