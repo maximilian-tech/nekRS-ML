@@ -200,6 +200,7 @@ void smartredis_client_t::put_wallModel_data(
         int tstep)
 {
   unsigned long int num_cols = _num_inputs+_num_outputs;
+  if (_num_samples > 0) {
   std::string key = "x." + std::to_string(_rank) + "." + std::to_string(tstep);
   std::vector<dfloat> train_data(_num_samples*num_cols);
   std::vector<dfloat> vel_data(_num_samples);
@@ -229,6 +230,7 @@ void smartredis_client_t::put_wallModel_data(
     printf("Sending field with key %s \n",key.c_str());
   _client->put_tensor(key, train_data.data(), {_num_samples,num_cols},
                     SRTensorTypeDouble, SRMemLayoutContiguous);
+  }
   MPI_Barrier(platform->comm.mpiComm);
   if (_rank == 0)
     printf("Done\n");
