@@ -558,18 +558,21 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     nekrs::forceLastStep();
   }
 #elif defined(KASANE)
-  int END_TIMESTEP = 3500;
+  int END_TIMESTEP = 200; // 3500;
   int completed = 0;
+  int shutdown_requested = 0;
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
-
-  if (completed  || tstep >= END_TIMESTEP) {
+  
+  if (completed ) {
     if (op.header.command == 1) {
-        std::cout << "Got completed" << __LINE__ << std::endl;
-        nekrs::setEndTime(-10.0);
-        nekrs::forceLastStep();
+      shutdown_requested = 1;        
     }
-
     RDQ_ASSERT(RDQ_OK == rdq_global_feedback_op_reset(&op));
+  }
+  if(shutdown_requested || tstep >= END_TIMESTEP)
+  {
+      nekrs::setEndTime(-10.0);
+      nekrs::forceLastStep();
   }
 #endif
 }
@@ -577,10 +580,14 @@ void UDF_ExecuteStep(dfloat time, int tstep)
 #elif defined(KASANE)
 void UDF_Finalize()
 {
+  std::cout << "Here" << __LINE__ << std::endl;
   int shard=0;
   RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);  
+  std::cout << "Here" << __LINE__ << std::endl;
   rdq_global_feedback_channel_close(&ch, &op);
+  std::cout << "Here" << __LINE__ << std::endl;
   rdq_global_feedback_op_free(&op);
+  std::cout << "Here" << __LINE__ << std::endl;
   rdq_close(ctx);
   std::cout << "Finalize" << std::endl;
 }
