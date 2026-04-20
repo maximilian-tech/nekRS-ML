@@ -25,7 +25,8 @@ run_args:
 
 # Simulation config
 sim:
-    executable: "/data/horse/ws/s0872522-testing/nekRS-ML/nekrs_install/bin/nekrs"
+  #executable: "/data/horse/ws/s0872522-testing/nekRS-ML/nekrs_install/bin/nekrs"
+    executable: "../../nekrs_install/bin/nekrs"
     arguments: "--setup turbChannel_train.par"
     #affinity: ""
     copy_files: ["./turbChannel_train.usr","./turbChannel_train.par","./turbChannel_train.udf","./turbChannel_train.re2",
@@ -34,7 +35,8 @@ sim:
 
 # Trainer config
 train:
-    executable: "/data/horse/ws/s0872522-testing/nekRS-ML/examples/turbChannel_wallModel_ML/trainer.py"
+    #executable: "/data/horse/ws/s0872522-testing/nekRS-ML/examples/turbChannel_wallModel_ML/trainer.py"
+    executable: "../../trainer.py"
     link_files: []
     arguments: "+logging=info +device=cpu +dbnodes=1 +ppn=1"
     #affinity: ""
