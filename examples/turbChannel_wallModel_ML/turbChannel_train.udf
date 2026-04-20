@@ -580,15 +580,14 @@ void UDF_ExecuteStep(dfloat time, int tstep)
 #elif defined(KASANE)
 void UDF_Finalize()
 {
-  std::cout << "Here" << __LINE__ << std::endl;
+  if (platform->comm.mpiRank == 0)
+    std::cout << "Finalizing" << std::endl;
   int shard=0;
   RDQ_ASSERT(rdq_unregister_producer(ctx, shard) == RDQ_OK);  
-  std::cout << "Here" << __LINE__ << std::endl;
   rdq_global_feedback_channel_close(&ch, &op);
-  std::cout << "Here" << __LINE__ << std::endl;
   rdq_global_feedback_op_free(&op);
-  std::cout << "Here" << __LINE__ << std::endl;
   rdq_close(ctx);
-  std::cout << "Finalize" << std::endl;
+  if (platform->comm.mpiRank == 0)
+    std::cout << "Finalized" << std::endl;
 }
 #endif
