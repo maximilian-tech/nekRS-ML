@@ -558,7 +558,7 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     nekrs::forceLastStep();
   }
 #elif defined(KASANE)
-  int END_TIMESTEP = 200; // 3500;
+  int END_TIMESTEP = 3500;
   int completed = 0;
   int shutdown_requested = 0;
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
