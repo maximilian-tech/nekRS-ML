@@ -180,7 +180,7 @@ def main():
     owners = [rank]
     shard = 0
     
-    ctx = rdqpy.Context(comm, nshards=1, owners=owners)
+    ctx = rdqpy.Context(comm, nshards=1, owners=owners, meta_cap=4096, ring_payload=100*1024*1024)
     ctx.set_log(level=2, categories=0xFFFF, json=False, color=False)
     intercomms, n_intercomm = rdqpy.create_intercomm(ml_comm)
     assert len(intercomms) == n_intercomm

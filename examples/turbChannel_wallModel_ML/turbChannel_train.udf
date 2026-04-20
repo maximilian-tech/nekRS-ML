@@ -379,7 +379,11 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   int size;
   MPI_Comm_size(MPI_COMM_WORLD, &size);
   int owners[1] = {size-1}; // mpmd -- > size is the next appnum
-  RDQ_ASSERT(rdq_open(MPI_COMM_WORLD, nshards, owners, NULL,  &ctx) == RDQ_OK);
+  rdq_init_cfg_t cfg;
+  rdq_set_default_config(&cfg);
+  cgf.all.meta_cap = 4096;
+  cfg.all.ring_cap[RDQ_R_PAYLOAD] = 100*1024*1024;
+  RDQ_ASSERT(rdq_open(MPI_COMM_WORLD, nshards, owners, &cfg,  &ctx) == RDQ_OK);
   //rdq_log_set_level(ctx, RDQ_LOG_TRACE);
   rdq_log_set_categories(ctx, RDQ_LOGC_ALL); // or a mask you want
   rdq_log_shard_stats(ctx);
