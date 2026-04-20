@@ -36,7 +36,7 @@ export REPLAY_ENABLE=no
 export DEFAULT_NUM_RANKS=120
 export PALS_LOCAL_SIZE=${SIM_RANKS:-${DEFAULT_NUM_RANKS}}
 
-export REPS=3
+: "${REPS:=3}"
 
 rm -rf .cache/udf
 
