@@ -3,7 +3,7 @@
 polynomialOrder = 5
 #startFrom = "restart.fld"+time=0
 stopAt = numSteps
-numSteps = 40000 # trainer tells sim to shut down at 300
+numSteps = 40000 # trainer tells sim to shut down at 3500
 #endTime = 400
 #endTime = 2
 
@@ -11,7 +11,7 @@ dt = targetCFL=1 + max=2e-2 + initial=5e-3
 timeStepper = tombo2
 
 checkpointControl = simulationTime
-checkpointInterval = 5
+checkpointInterval = 400 # Do not output simulation data
 
 regularization = hpfrt + nModes=1 + scalingCoeff=5
 #constFlowRate = meanVelocity=1.0 + direction=X
