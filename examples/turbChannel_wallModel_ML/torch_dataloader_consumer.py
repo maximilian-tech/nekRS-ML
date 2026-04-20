@@ -331,9 +331,8 @@ def main():
 
         print(" ".join(metrics))
 
-        #if False:
-        #if count >= 270*6: # Skip 30 from the beginning
-        if (loss.item() < 1e-10) or (count > 35 * 125):
+        if False:
+        #if (loss.item() < 1e-10):
             done = ch.send_progress(
                 {
                     "seq": 1,

@@ -377,6 +377,9 @@ def main(cfg: DictConfig):
     nNeurons = 20  # number of neuronsining settings
     tol = 1.0e-10  # convergence tolerance on loss function
 
+    # Case Setup.
+    END_TIMESTEP = 3500
+
     # Set device to run on
     if rank == 0:
         print(f"\nRunning on device: {cfg.device} \n", flush=True)
@@ -420,7 +423,7 @@ def main(cfg: DictConfig):
         else:
             continue
 
-        # new data is available in database so update Dataset and DataLoader
+        # new data is available in database so update Dataset and DataLoader, else cycle
         if istep != tmp[0]:
             istep = tmp[0]
             #step_list.append(istep)
@@ -439,6 +442,7 @@ def main(cfg: DictConfig):
             )
         else:
             continue
+
         if rank == 0:
             print(f"\n Epoch {iepoch}\n-------------------------------", flush=True)
 
@@ -473,7 +477,7 @@ def main(cfg: DictConfig):
                     flush=True,
                 )
             break
-        if istep >= 6500:
+        if istep >= END_TIMESTEP:
             if rank == 0:
                 print(
                     "\nMax number of epochs reached. Stopping training loop. \n",

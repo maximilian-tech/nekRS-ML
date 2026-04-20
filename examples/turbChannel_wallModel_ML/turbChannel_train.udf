@@ -384,13 +384,13 @@ void UDF_Setup0(MPI_Comm comm, setupAide &options)
   rdq_log_set_categories(ctx, RDQ_LOGC_ALL); // or a mask you want
   rdq_log_shard_stats(ctx);
   RDQ_ASSERT(rdq_register_producer(ctx, shard) == RDQ_OK);
-  std::cout << "HERER!!!!!" << std::endl;
+  
   
   MPI_Comm* intercomm = NULL;
   int n_intercomm = 0;
-  std::cout << "HERER!!!!! " << n_intercomm << std::endl;
+  
   RDQ_Create_intercomm(comm, &intercomm, &n_intercomm);
-  std::cout << "HERER!!!!! num intercomm: " << n_intercomm << std::endl;
+  
   if(n_intercomm > 0)
   {
     rdq_global_feedback_channel_init(&ch, comm, intercomm[0], /*is sender*/ 0, 0);
@@ -558,12 +558,13 @@ void UDF_ExecuteStep(dfloat time, int tstep)
     nekrs::forceLastStep();
   }
 #elif defined(KASANE)
+  int END_TIMESTEP = 3500;
   int completed = 0;
   RDQ_ASSERT(RDQ_OK == rdq_global_feedback_recv_get(&ch, &op, &completed));
 
-  if (completed) {
-    std::cout << "Got completed" << __LINE__ << std::endl;
+  if (completed  || tstep >= END_TIMESTEP) {
     if (op.header.command == 1) {
+        std::cout << "Got completed" << __LINE__ << std::endl;
         nekrs::setEndTime(-10.0);
         nekrs::forceLastStep();
     }
